@@ -4,6 +4,7 @@ import subprocess
 import time
 # import msgpack
 
+from collections import defaultdict
 from gitsync import util
 
 CACHE_DIR = '/tmp/gitsync.nvim'
@@ -16,40 +17,52 @@ class GitSyncPlugin:
         self.remote_url = None
         self.cache_tag = None
         self.last_poll = 0
-        self.poll_master = None
         self.poll_seconds = None
         self.callback = None
+        self.buf_desynced = defaultdict(set)
 
-    def poll_ref(self, ref, remote):
+    def poll_remote(self, branch, repo):
         fetch = False
-        cache_entry = '%s/%s_%s' % (CACHE_DIR, self.cache_tag, util.strhash(ref))
+        cache_entry = '%s/%s_%s' % (CACHE_DIR, self.cache_tag, util.strhash(branch))
         if not os.path.exists(cache_entry):
             fetch = True
         else:
             lastmodtime = os.stat(cache_entry).st_mtime
             fetch = (time.time() - lastmodtime) >= self.poll_seconds
 
-        util.touch(cache_entry)
         if fetch:
-            util.bash('git fetch %s %s' % (remote, ref))
+            util.touch(cache_entry)
+            util.bash('git fetch %s %s' % (repo, branch))
+
         return fetch
 
-    def notify_desynced(self, local, remote):
+    def update_desynced(self, local, remote, buf):
         for b in self.vim.buffers:
-            old = b.vars.get('gitsync_desynced')
-            diff = util.bash('git diff %s..%s -- %s' % (local, remote, b.name))
-            # b.vars['gitsync_desynced'] = len(diff) > 0
-            new = b.vars['gitsync_desynced'] = True
-            if self.callback and (old is None or old != new):
-                self.vim.command('call %s()' % self.callback)
+            if int(util.bash('git rev-list --count %s..%s' % (local, remote))) == 0:
+                continue
 
-    @neovim.function('sync_status')
-    def sync_status(self):
-        return self.vim.current.buffer.vars.get('gitsync_desynced', False)
+            bufset = self.buf_desynced[buf]
+            try:
+                desynced = len(util.bash('git diff %s..%s -- %s' % (local, remote, b.name))) > 0
+
+                if desynced and local not in bufset:
+                    bufset.add(local)
+                    trigger = True
+                elif not desynced and local in bufset:
+                    bufset.remove(local)
+                    trigger = True
+
+                if self.callback and trigger:
+                    self.vim.command('call %s()' % self.callback)
+            except subprocess.CalledProcessError:
+                pass
+
+    @neovim.function('GitsyncDesynced', sync=True)
+    def sync_status(self, _):
+        return sorted(self.buf_desynced[self.vim.current.buffer.number])
 
     @neovim.command('GitsyncInitPython')
     def init_python(self):
-        self.poll_master = self.vim.vars.get('gitsync_poll_master', True)
         self.poll_seconds = 60 * self.vim.vars.get('gitsync_poll_min', 5)
         self.callback = self.vim.vars.get('gitsync_callback')
         self.remote_url = util.bash('git config --get remote.origin.url')
@@ -57,8 +70,13 @@ class GitSyncPlugin:
         if not os.path.exists(CACHE_DIR):
             os.makedirs(CACHE_DIR)
 
-    # @neovim.autocmd('CursorHold,CursorHoldI,CursorMoved,CursorMovedI')
-    @neovim.command('GitsyncSync')
+        self.sync()
+
+    @neovim.autocmd('BufRead')
+    def _reset_timer(self):
+        self.last_poll = 0
+
+    @neovim.autocmd('CursorHold,CursorHoldI,CursorMoved,CursorMovedI')
     def sync(self):
         if not all((self.remote_url, self.cache_tag)):
             return
@@ -68,21 +86,28 @@ class GitSyncPlugin:
             return
         self.last_poll = now
 
-        branch = None
-        try:
-            branch = util.bash('git symbolic-ref --short HEAD')
-            ref = util.bash(['git', 'config', '--get', 'branch.%s.merge' % branch])
-            remote = util.bash(['git', 'config', '--get', 'branch.%s.remote' % branch])
+        buf = self.vim.current.buffer.number
 
-            self.poll_ref(ref, remote)
-            self.notify_desynced(branch, ref)
+        local_ref = None
+        try:
+            remote_ref = util.bash('git rev-parse --symbolic-full-name --abbrev-ref @{u}')
+            repo, remote_branch = remote_ref.split('/', maxsplit=1)
+            local_ref = util.bash('git symbolic-ref --short HEAD')
+
+            self.poll_remote(remote_branch, repo)
+            self.update_desynced(local_ref, remote_ref, buf)
         except subprocess.CalledProcessError:
             pass  # TODO
 
-        if self.poll_master and branch and branch != 'master':
+        if local_ref is None or local_ref != 'master':
             try:
-                master_ref = util.bash('git config --get branch.master.merge')
-                master_remote = util.bash('git config --get branch.master.remote')
-                self.poll_ref(master_ref, master_remote)
+                remote_ref = util.bash(
+                    'git rev-parse --symbolic-full-name --abbrev-ref master@{u}'
+                )
+                repo, remote_branch = remote_ref.split('/', maxsplit=1)
+                local_ref = 'master'
+
+                self.poll_remote(remote_branch, repo)
+                self.update_desynced(local_ref, remote_ref, buf)
             except subprocess.CalledProcessError:
                 pass  # TODO

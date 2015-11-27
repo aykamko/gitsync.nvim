@@ -38,4 +38,5 @@ def pdb(host='127.0.0.1', port=4444):
 
 
 def debug(vim, msg):
+    msg = str(msg)
     vim.command('echomsg "' + msg.replace('"', '""') + '"')
