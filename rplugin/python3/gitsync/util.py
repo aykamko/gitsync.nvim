@@ -25,6 +25,11 @@ def bash(cmd, strip=True):
     return out
 
 
+def bash_exitcode(cmd):
+    cmdstr = cmd.split() if (type(cmd) == str) else cmd
+    return subprocess.call(cmdstr)
+
+
 def strhash(string, encoding='utf8'):
     if type(string) == bytes:
         h = base64.urlsafe_b64encode(string)
