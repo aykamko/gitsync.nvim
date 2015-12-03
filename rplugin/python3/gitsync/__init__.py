@@ -132,6 +132,7 @@ class GitSyncPlugin:
         if not os.path.exists(CACHE_DIR):
             os.makedirs(CACHE_DIR)
         self.initialized = True
+        self.vim.vars['gitsync_initialized'] = 1
 
     @neovim.autocmd('BufRead')
     def add_buffer(self):
@@ -175,14 +176,14 @@ class GitSyncPlugin:
                 self.vim.command('call airline#extensions#gitsync#apply()')
 
     @neovim.function('GitsyncStatus', sync=True)
-    def status(self, _=None):
+    def status(self, args=None):
         desynced = self.desynced()
         if not len(desynced):
             return ''
         return ', '.join(('%s(%d)' % (b, c) for (b, c) in desynced)) + ' ↻'
 
     @neovim.function('GitsyncDesynced', sync=True)
-    def desynced(self, _=None):
+    def desynced(self, args=None):
         gbuf = self.active_bufs.get(self.vim.current.buffer.number, None)
         if not gbuf:
             return []
