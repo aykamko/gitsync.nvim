@@ -1,13 +1,20 @@
 gitsync.nvim
 ===
 
-![statusline](statusline.png)
+![statusline](gitsync.png)
 
 **gitsync.nvim** is a [Neovim](https://github.com/neovim/neovim) plugin to stay up to date with your git repo, asynchronously.
 
-**This plugin is alpha-quality.**
+**This plugin is alpha quality.**
 
-This plugin will only work for Neovim, since it wouldn't make sense to block vanilla vim's main thread to run a `git fetch`.
+Requirements
+---
+
+gitsync will only ever work for Neovim, since it wouldn't make sense to block vanilla vim's main thread to run a `git fetch`.
+
+gitsync requires the Neovim Python 3 client. You can install it with pip:
+
+	sudo pip3 install neovim
 
 Installation
 ---
@@ -16,7 +23,7 @@ Installation
 
 		Plug 'aykamko/gitsync.nvim'
 
-Options
+Configuration
 ---
 To enable [vim-airline](https://github.com/bling/vim-airline) integration, add the following line to your vimrc:
 
