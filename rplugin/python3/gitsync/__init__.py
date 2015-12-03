@@ -177,14 +177,15 @@ class GitSyncPlugin:
 
     @neovim.function('GitsyncStatus', sync=True)
     def status(self, args=None):
-        desynced = self.desynced()
+        desynced = self.desynced(args)
         if not len(desynced):
             return ''
         return ', '.join(('%s(%d)' % (b, c) for (b, c) in desynced)) + ' ↻'
 
     @neovim.function('GitsyncDesynced', sync=True)
     def desynced(self, args=None):
-        gbuf = self.active_bufs.get(self.vim.current.buffer.number, None)
+        bufnum = args[0] if len(args) else self.vim.current.buffer.number
+        gbuf = self.active_bufs.get(bufnum, None)
         if not gbuf:
             return []
         return gbuf.desynced_branches
