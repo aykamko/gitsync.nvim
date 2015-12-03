@@ -17,9 +17,19 @@ def touch(fname, mode=0o666, dir_fd=None, **kwargs):
                  dir_fd=None if os.supports_fd else dir_fd, **kwargs)
 
 
+def git(gitdir, cmd, strip=True, exitcode=False):
+    cmdlst = cmd.split() if (type(cmd) == str) else cmd
+    if os.path.isfile(gitdir):
+        gitdir = os.path.dirname(gitdir)
+    cmdlst = ['git', '-C', gitdir] + cmdlst
+    if exitcode:
+        return bash_exitcode(cmdlst)
+    return bash(cmdlst, strip=strip)
+
+
 def bash(cmd, strip=True):
-    cmdstr = cmd.split() if (type(cmd) == str) else cmd
-    out = subprocess.check_output(cmdstr, universal_newlines=True)
+    cmdlst = cmd.split() if (type(cmd) == str) else cmd
+    out = subprocess.check_output(cmdlst, universal_newlines=True)
     if strip:
         out = out.strip()
     return out
